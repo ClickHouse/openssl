@@ -222,13 +222,6 @@ size_t OPENSSL_instrument_bus2(unsigned int *out, size_t cnt, size_t max)
         return 0;
 }
 
-#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
-# if __GLIBC_PREREQ(2, 16)
-#  include <sys/auxv.h>
-#  define OSSL_IMPLEMENT_GETAUXVAL
-# endif
-#endif
-
 /* I wish <sys/auxv.h> was universally available */
 #define HWCAP                   16      /* AT_HWCAP */
 #define HWCAP_PPC64             (1U << 30)

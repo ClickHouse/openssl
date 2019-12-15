@@ -31,13 +31,6 @@ int OPENSSL_issetugid(void)
 # include <unistd.h>
 # include <sys/types.h>
 
-# if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
-#  if __GLIBC_PREREQ(2, 16)
-#   include <sys/auxv.h>
-#   define OSSL_IMPLEMENT_GETAUXVAL
-#  endif
-# endif
-
 int OPENSSL_issetugid(void)
 {
 # ifdef OSSL_IMPLEMENT_GETAUXVAL

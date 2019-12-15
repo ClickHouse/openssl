@@ -63,13 +63,6 @@ uint32_t OPENSSL_rdtsc(void)
 void OPENSSL_cpuid_setup(void) __attribute__ ((constructor));
 # endif
 
-# if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
-#  if __GLIBC_PREREQ(2, 16)
-#   include <sys/auxv.h>
-#   define OSSL_IMPLEMENT_GETAUXVAL
-#  endif
-# endif
-
 /*
  * ARM puts the feature bits for Crypto Extensions in AT_HWCAP2, whereas
  * AArch64 used AT_HWCAP.

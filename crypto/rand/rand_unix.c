@@ -122,11 +122,6 @@ static uint64_t get_timer_bits(void);
 # undef OSSL_POSIX_TIMER_OKAY
 # if defined(_POSIX_TIMERS) && _POSIX_TIMERS > 0
 #  if defined(__GLIBC__)
-#   if defined(__GLIBC_PREREQ)
-#    if __GLIBC_PREREQ(2, 17)
-#     define OSSL_POSIX_TIMER_OKAY
-#    endif
-#   endif
 #  else
 #   define OSSL_POSIX_TIMER_OKAY
 #  endif

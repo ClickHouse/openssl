@@ -16,15 +16,6 @@
 #include "crypto/ctype.h"
 #include "s390x_arch.h"
 
-#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
-# if __GLIBC_PREREQ(2, 16)
-#  include <sys/auxv.h>
-#  if defined(HWCAP_S390_STFLE) && defined(HWCAP_S390_VX)
-#   define OSSL_IMPLEMENT_GETAUXVAL
-#  endif
-# endif
-#endif
-
 #define LEN     128
 #define STR_(S) #S
 #define STR(S)  STR_(S)
