@@ -100,10 +100,10 @@ DEFINE_RUN_ONCE_STATIC(init_info_strings)
         add_seeds_string("getrandom-syscall");
 #endif
 #ifdef OPENSSL_RAND_SEED_DEVRANDOM
-        add_seeds_stringlist("random-device", { DEVRANDOM, NULL });
+        add_seeds_string("random-device");
 #endif
 #ifdef OPENSSL_RAND_SEED_EGD
-        add_seeds_stringlist("EGD", { DEVRANDOM_EGD, NULL });
+        add_seeds_string("EGD");
 #endif
 #ifdef OPENSSL_RAND_SEED_OS
         add_seeds_string("os-specific");
