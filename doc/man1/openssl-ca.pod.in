@@ -1,9 +1,5 @@
 =pod
-
-=begin comment
-{- join("\n", @autowarntext) -}
-
-=end comment
+{- OpenSSL::safe::output_do_not_edit_headers(); -}
 
 =head1 NAME
 
@@ -27,6 +23,7 @@ B<openssl> B<ca>
 [B<-crl_CA_compromise> I<time>]
 [B<-crldays> I<days>]
 [B<-crlhours> I<hours>]
+[B<-crlsec> I<seconds>]
 [B<-crlexts> I<section>]
 [B<-startdate> I<date>]
 [B<-enddate> I<date>]
@@ -52,7 +49,6 @@ B<openssl> B<ca>
 [B<-msie_hack>]
 [B<-extensions> I<section>]
 [B<-extfile> I<section>]
-[B<-engine> I<id>]
 [B<-subj> I<arg>]
 [B<-utf8>]
 [B<-sigopt> I<nm>:I<v>]
@@ -62,6 +58,7 @@ B<openssl> B<ca>
 [B<-sm2-id> I<string>]
 [B<-sm2-hex-id> I<hex-string>]
 {- $OpenSSL::safe::opt_r_synopsis -}
+{- $OpenSSL::safe::opt_engine_synopsis -}
 [I<certreq>...]
 
 =for openssl ifdef engine sm2-id sm2-hex-id
@@ -152,6 +149,8 @@ Pass options to the signature algorithm during sign or verify operations.
 Names and values of these options are algorithm-specific.
 
 =item B<-key> I<password>
+
+=for openssl foreign manual ps(1)
 
 The password used to encrypt the private key. Since on some
 systems the command line arguments are visible (e.g. Unix with
@@ -257,13 +256,6 @@ An additional configuration file to read certificate extensions from
 (using the default section unless the B<-extensions> option is also
 used).
 
-=item B<-engine> I<id>
-
-Specifying an engine (by its unique I<id> string) will cause B<ca>
-to attempt to obtain a functional reference to the specified engine,
-thus initialising it if needed. The engine will then be set as the default
-for all available algorithms.
-
 =item B<-subj> I<arg>
 
 Supersedes subject name given in the request.
@@ -314,6 +306,8 @@ certificate. The argument for this option is string of hexadecimal digits.
 
 {- $OpenSSL::safe::opt_r_item -}
 
+{- $OpenSSL::safe::opt_engine_item -}
+
 =back
 
 =head1 CRL OPTIONS
@@ -332,6 +326,10 @@ now to place in the CRL nextUpdate field.
 =item B<-crlhours> I<num>
 
 The number of hours before the next CRL is due.
+
+=item B<-crlsec> I<num>
+
+The number of seconds before the next CRL is due.
 
 =item B<-revoke> I<filename>
 

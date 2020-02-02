@@ -168,8 +168,7 @@ Not all parameters may be supported by all providers.
 See L<OSSL_PROVIDER(3)> for more information on providers.
 See L<OSSL_PARAM(3)> for more information on parameters.
 These functions must only be called after the EVP_PKEY_CTX has been initialised
-for use in an operation (for example by L<EVP_PKEY_sign_init_ex(3)>,
-L<EVP_PKEY_derive_init_ex(3)> or other similar functions).
+for use in an operation.
 
 The parameters currently supported by the default provider are:
 
@@ -204,8 +203,7 @@ that can be used with EVP_PKEY_CTX_get_params() and EVP_PKEY_CTX_set_params()
 respectively.
 See L<OSSL_PARAM(3)> for the use of B<OSSL_PARAM> as parameter descriptor.
 These functions must only be called after the EVP_PKEY_CTX has been initialised
-for use in an operation (for example by L<EVP_PKEY_sign_init_ex(3)>,
-L<EVP_PKEY_derive_init_ex(3)> or other similar functions).
+for use in an operation.
 
 The function EVP_PKEY_CTX_ctrl() sends a control operation to the context
 B<ctx>. The key type used must match B<keytype> if it is not -1. The parameter
@@ -412,10 +410,11 @@ prime B<p>.
 If B<pad> is zero (the default) then no padding is performed.
 
 EVP_PKEY_CTX_set_dh_nid() sets the DH parameters to values corresponding to
-B<nid> as defined in RFC7919. The B<nid> parameter must be B<NID_ffdhe2048>,
-B<NID_ffdhe3072>, B<NID_ffdhe4096>, B<NID_ffdhe6144>, B<NID_ffdhe8192>
-or B<NID_undef> to clear the stored value. This macro can be called during
-parameter or key generation.
+B<nid> as defined in RFC7919 or RFC3526. The B<nid> parameter must be
+B<NID_ffdhe2048>, B<NID_ffdhe3072>, B<NID_ffdhe4096>, B<NID_ffdhe6144>,
+B<NID_ffdhe8192>, B<NID_modp_1536>, B<NID_modp_2048>, B<NID_modp_3072>,
+B<NID_modp_4096>, B<NID_modp_6144>, B<NID_modp_8192> or B<NID_undef> to clear
+the stored value. This macro can be called during parameter or key generation.
 The nid parameter and the rfc5114 parameter are mutually exclusive.
 
 The EVP_PKEY_CTX_set_dh_rfc5114() and EVP_PKEY_CTX_set_dhx_rfc5114() macros are

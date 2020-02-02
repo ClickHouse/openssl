@@ -164,6 +164,8 @@ int EVP_PKEY_derive_init(EVP_PKEY_CTX *ctx)
     int ret;
     void *provkey = NULL;
     EVP_KEYEXCH *exchange = NULL;
+    EVP_KEYMGMT *tmp_keymgmt = NULL;
+    const char *supported_exch = NULL;
 
     if (ctx == NULL) {
         EVPerr(0, EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
@@ -173,46 +175,66 @@ int EVP_PKEY_derive_init(EVP_PKEY_CTX *ctx)
     evp_pkey_ctx_free_old_ops(ctx);
     ctx->operation = EVP_PKEY_OP_DERIVE;
 
-    if (ctx->engine != NULL || ctx->algorithm == NULL)
+    /*
+     * TODO when we stop falling back to legacy, this and the ERR_pop_to_mark()
+     * calls can be removed.
+     */
+    ERR_set_mark();
+
+    if (ctx->engine != NULL || ctx->keytype == NULL)
         goto legacy;
+
+    /* Ensure that the key is provided.  If not, go legacy */
+    tmp_keymgmt = ctx->keymgmt;
+    provkey = evp_pkey_make_provided(ctx->pkey, ctx->libctx,
+                                     &tmp_keymgmt, ctx->propquery, 0);
+    if (provkey == NULL)
+        goto legacy;
+    if (!EVP_KEYMGMT_up_ref(tmp_keymgmt)) {
+        ERR_clear_last_mark();
+        ERR_raise(ERR_LIB_EVP, EVP_R_INITIALIZATION_ERROR);
+        goto err;
+    }
+    EVP_KEYMGMT_free(ctx->keymgmt);
+    ctx->keymgmt = tmp_keymgmt;
+
+    if (ctx->keymgmt->query_operation_name != NULL)
+        supported_exch = ctx->keymgmt->query_operation_name(OSSL_OP_KEYEXCH);
+
+    /*
+     * If we didn't get a supported exch, assume there is one with the
+     * same name as the key type.
+     */
+    if (supported_exch == NULL)
+        supported_exch = ctx->keytype;
 
     /*
      * Because we cleared out old ops, we shouldn't need to worry about
-     * checking if exchange is already there.  Keymgmt is a different
-     * matter, as it isn't tied to a specific EVP_PKEY op.
+     * checking if exchange is already there.
      */
-    exchange = EVP_KEYEXCH_fetch(ctx->libctx, ctx->algorithm, ctx->propquery);
-    if (exchange != NULL && ctx->keymgmt == NULL) {
-        int name_id = EVP_KEYEXCH_number(exchange);
+    exchange = EVP_KEYEXCH_fetch(ctx->libctx, supported_exch, ctx->propquery);
 
-        ctx->keymgmt =
-            evp_keymgmt_fetch_by_number(ctx->libctx, name_id, ctx->propquery);
-    }
-
-    if (ctx->keymgmt == NULL
-        || exchange == NULL
+    if (exchange == NULL
         || (EVP_KEYMGMT_provider(ctx->keymgmt)
             != EVP_KEYEXCH_provider(exchange))) {
         /*
-         * We don't have the full support we need with provided methods,
-         * let's go see if legacy does.  Also, we don't need to free
-         * ctx->keymgmt here, as it's not necessarily tied to this
-         * operation.  It will be freed by EVP_PKEY_CTX_free().
+         * We don't need to free ctx->keymgmt here, as it's not necessarily
+         * tied to this operation.  It will be freed by EVP_PKEY_CTX_free().
          */
         EVP_KEYEXCH_free(exchange);
         goto legacy;
     }
 
+    /*
+     * TODO remove this when legacy is gone
+     * If we don't have the full support we need with provided methods,
+     * let's go see if legacy does.
+     */
+    ERR_pop_to_mark();
+
+    /* No more legacy from here down to legacy: */
 
     ctx->op.kex.exchange = exchange;
-
-    if (ctx->pkey != NULL) {
-        provkey = evp_keymgmt_export_to_provider(ctx->pkey, ctx->keymgmt, 0);
-        if (provkey == NULL) {
-            EVPerr(0, EVP_R_INITIALIZATION_ERROR);
-            goto err;
-        }
-    }
     ctx->op.kex.exchprovctx = exchange->newctx(ossl_provider_ctx(exchange->prov));
     if (ctx->op.kex.exchprovctx == NULL) {
         /* The provider key can stay in the cache */
@@ -227,7 +249,17 @@ int EVP_PKEY_derive_init(EVP_PKEY_CTX *ctx)
     return 0;
 
  legacy:
-    if (ctx == NULL || ctx->pmeth == NULL || ctx->pmeth->derive == NULL) {
+    /*
+     * TODO remove this when legacy is gone
+     * If we don't have the full support we need with provided methods,
+     * let's go see if legacy does.
+     */
+    ERR_pop_to_mark();
+
+#ifdef FIPS_MODE
+    return 0;
+#else
+    if (ctx->pmeth == NULL || ctx->pmeth->derive == NULL) {
         EVPerr(0, EVP_R_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE);
         return -2;
     }
@@ -238,11 +270,12 @@ int EVP_PKEY_derive_init(EVP_PKEY_CTX *ctx)
     if (ret <= 0)
         ctx->operation = EVP_PKEY_OP_UNDEFINED;
     return ret;
+#endif
 }
 
 int EVP_PKEY_derive_set_peer(EVP_PKEY_CTX *ctx, EVP_PKEY *peer)
 {
-    int ret;
+    int ret = 0;
     void *provkey = NULL;
 
     if (ctx == NULL) {
@@ -261,13 +294,15 @@ int EVP_PKEY_derive_set_peer(EVP_PKEY_CTX *ctx, EVP_PKEY *peer)
     }
 
     provkey = evp_keymgmt_export_to_provider(peer, ctx->keymgmt, 0);
-    if (provkey == NULL) {
-        EVPerr(EVP_F_EVP_PKEY_DERIVE_SET_PEER, ERR_R_INTERNAL_ERROR);
-        return 0;
-    }
+    /* If export failed, legacy may be able to pick it up */
+    if (provkey == NULL)
+        goto legacy;
     return ctx->op.kex.exchange->set_peer(ctx->op.kex.exchprovctx, provkey);
 
  legacy:
+#ifdef FIPS_MODE
+    return ret;
+#else
     if (ctx->pmeth == NULL
         || !(ctx->pmeth->derive != NULL
              || ctx->pmeth->encrypt != NULL
@@ -328,6 +363,7 @@ int EVP_PKEY_derive_set_peer(EVP_PKEY_CTX *ctx, EVP_PKEY *peer)
 
     EVP_PKEY_up_ref(peer);
     return 1;
+#endif
 }
 
 int EVP_PKEY_derive(EVP_PKEY_CTX *ctx, unsigned char *key, size_t *pkeylen)
@@ -370,7 +406,7 @@ int EVP_KEYEXCH_number(const EVP_KEYEXCH *keyexch)
 
 int EVP_KEYEXCH_is_a(const EVP_KEYEXCH *keyexch, const char *name)
 {
-    return evp_is_a(keyexch->prov, keyexch->name_id, name);
+    return evp_is_a(keyexch->prov, keyexch->name_id, NULL, name);
 }
 
 void EVP_KEYEXCH_do_all_provided(OPENSSL_CTX *libctx,

@@ -81,6 +81,16 @@ static void *keymgmt_from_dispatch(int name_id,
             keymgmt->exportdomparam_types =
                 OSSL_get_OP_keymgmt_exportdomparam_types(fns);
             break;
+        case OSSL_FUNC_KEYMGMT_GET_DOMPARAM_PARAMS:
+            if (keymgmt->get_domparam_params == NULL)
+                keymgmt->get_domparam_params =
+                    OSSL_get_OP_keymgmt_get_domparam_params(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_GETTABLE_DOMPARAM_PARAMS:
+            if (keymgmt->gettable_domparam_params == NULL)
+                keymgmt->gettable_domparam_params =
+                    OSSL_get_OP_keymgmt_gettable_domparam_params(fns);
+            break;
         case OSSL_FUNC_KEYMGMT_IMPORTKEY:
             if (keymgmt->importkey != NULL)
                 break;
@@ -118,6 +128,46 @@ static void *keymgmt_from_dispatch(int name_id,
             keymgmt->exportkey_types =
                 OSSL_get_OP_keymgmt_exportkey_types(fns);
             break;
+        case OSSL_FUNC_KEYMGMT_GET_KEY_PARAMS:
+            if (keymgmt->get_key_params == NULL)
+                keymgmt->get_key_params =
+                    OSSL_get_OP_keymgmt_get_key_params(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_GETTABLE_KEY_PARAMS:
+            if (keymgmt->gettable_key_params == NULL)
+                keymgmt->gettable_key_params =
+                    OSSL_get_OP_keymgmt_gettable_key_params(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_QUERY_OPERATION_NAME:
+            if (keymgmt->query_operation_name != NULL)
+                break;
+            keymgmt->query_operation_name =
+                OSSL_get_OP_keymgmt_query_operation_name(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_VALIDATE_DOMPARAMS:
+            if (keymgmt->validatedomparams != NULL)
+                break;
+            keymgmt->validatedomparams =
+                OSSL_get_OP_keymgmt_validate_domparams(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_VALIDATE_PUBLIC:
+            if (keymgmt->validatepublic != NULL)
+                break;
+            keymgmt->validatepublic =
+                OSSL_get_OP_keymgmt_validate_public(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_VALIDATE_PRIVATE:
+            if (keymgmt->validateprivate != NULL)
+                break;
+            keymgmt->validateprivate =
+                OSSL_get_OP_keymgmt_validate_private(fns);
+            break;
+        case OSSL_FUNC_KEYMGMT_VALIDATE_PAIRWISE:
+            if (keymgmt->validatepairwise != NULL)
+                break;
+            keymgmt->validatepairwise =
+                OSSL_get_OP_keymgmt_validate_pairwise(fns);
+            break;
         }
     }
     /*
@@ -137,10 +187,14 @@ static void *keymgmt_from_dispatch(int name_id,
             && keymgmt->importdomparams == NULL)
         || (keymgmt->exportdomparam_types != NULL
             && keymgmt->exportdomparams == NULL)
+        || (keymgmt->gettable_domparam_params != NULL
+            && keymgmt->get_domparam_params == NULL)
         || (keymgmt->importkey_types != NULL
             && keymgmt->importkey == NULL)
         || (keymgmt->exportkey_types != NULL
-            && keymgmt->exportkey == NULL)) {
+            && keymgmt->exportkey == NULL)
+        || (keymgmt->gettable_key_params != NULL
+            && keymgmt->get_key_params == NULL)) {
         EVP_KEYMGMT_free(keymgmt);
         EVPerr(0, EVP_R_INVALID_PROVIDER_FUNCTIONS);
         return NULL;
@@ -206,7 +260,7 @@ int EVP_KEYMGMT_number(const EVP_KEYMGMT *keymgmt)
 
 int EVP_KEYMGMT_is_a(const EVP_KEYMGMT *keymgmt, const char *name)
 {
-    return evp_is_a(keymgmt->prov, keymgmt->name_id, name);
+    return evp_is_a(keymgmt->prov, keymgmt->name_id, NULL, name);
 }
 
 void EVP_KEYMGMT_do_all_provided(OPENSSL_CTX *libctx,

@@ -1,9 +1,5 @@
 =pod
-
-=begin comment
-{- join("\n", @autowarntext) -}
-
-=end comment
+{- OpenSSL::safe::output_do_not_edit_headers(); -}
 
 =head1 NAME
 
@@ -40,36 +36,7 @@ B<openssl> B<s_client>
 [B<-dane_tlsa_domain> I<domain>]
 [B<-dane_tlsa_rrdata> I<rrdata>]
 [B<-dane_ee_no_namechecks>]
-[B<-attime> I<timestamp>]
-[B<-check_ss_sig>]
-[B<-crl_check>]
-[B<-crl_check_all>]
-[B<-explicit_policy>]
-[B<-extended_crl>]
-[B<-ignore_critical>]
-[B<-inhibit_any>]
-[B<-inhibit_map>]
-[B<-no_check_time>]
-[B<-partial_chain>]
-[B<-policy> I<arg>]
-[B<-policy_check>]
-[B<-policy_print>]
-[B<-purpose> I<purpose>]
-[B<-suiteB_128>]
-[B<-suiteB_128_only>]
-[B<-suiteB_192>]
-[B<-trusted_first>]
-[B<-no_alt_chains>]
-[B<-use_deltas>]
-[B<-auth_level> I<num>]
-[B<-nameopt> I<option>]
-[B<-verify_depth> I<num>]
-[B<-verify_email> I<email>]
-[B<-verify_hostname> I<hostname>]
-[B<-verify_ip> I<ip>]
-[B<-verify_name> I<name>]
 [B<-build_chain>]
-[B<-x509_strict>]
 [B<-reconnect>]
 [B<-showcerts>]
 [B<-debug>]
@@ -84,19 +51,6 @@ B<openssl> B<s_client>
 [B<-psk> I<key>]
 [B<-psk_session> I<file>]
 [B<-quiet>]
-[B<-ssl3>]
-[B<-tls1>]
-[B<-tls1_1>]
-[B<-tls1_2>]
-[B<-tls1_3>]
-[B<-no_ssl3>]
-[B<-no_tls1>]
-[B<-no_tls1_1>]
-[B<-no_tls1_2>]
-[B<-no_tls1_3>]
-[B<-dtls>]
-[B<-dtls1>]
-[B<-dtls1_2>]
 [B<-sctp>]
 [B<-sctp_label_bug>]
 [B<-fallback_scsv>]
@@ -117,7 +71,6 @@ B<openssl> B<s_client>
 [B<-starttls> I<protocol>]
 [B<-xmpphost> I<hostname>]
 [B<-name> I<hostname>]
-[B<-engine> I<id>]
 [B<-tlsextdebug>]
 [B<-no_ticket>]
 [B<-sess_out> I<filename>]
@@ -132,9 +85,13 @@ B<openssl> B<s_client>
 [B<-keylogfile> I<file>]
 [B<-early_data> I<file>]
 [B<-enable_pha>]
+{- $OpenSSL::safe::opt_name_synopsis -}
+{- $OpenSSL::safe::opt_version_synopsis -}
 {- $OpenSSL::safe::opt_x_synopsis -}
 {- $OpenSSL::safe::opt_trust_synopsis -}
 {- $OpenSSL::safe::opt_r_synopsis -}
+{- $OpenSSL::safe::opt_engine_synopsis -}
+{- $OpenSSL::safe::opt_v_synopsis -}
 [I<host>:I<port>]
 
 =for openssl ifdef engine ssl_client_engine ct noct ctlogfile
@@ -286,13 +243,6 @@ will never fail due to a server certificate verify failure.
 Return verification errors instead of continuing. This will typically
 abort the handshake with a fatal error.
 
-=item B<-nameopt> I<option>
-
-Option which determines how the subject or issuer names are displayed. The
-I<option> argument can be a single option or multiple options separated by
-commas.  Alternatively the B<-nameopt> switch may be used more than once to
-set multiple options. See the L<openssl-x509(1)> manual page for details.
-
 =item B<-chainCApath> I<directory>
 
 The directory to use for building the chain provided to the server. This
@@ -369,17 +319,6 @@ In particular, SMTP and XMPP clients should set this option as SRV and MX
 records already make it possible for a remote domain to redirect client
 connections to any server of its choice, and in any case SMTP and XMPP clients
 do not execute scripts downloaded from remote servers.
-
-=item B<-attime>, B<-check_ss_sig>, B<-crl_check>, B<-crl_check_all>,
-B<-explicit_policy>, B<-extended_crl>, B<-ignore_critical>, B<-inhibit_any>,
-B<-inhibit_map>, B<-no_alt_chains>, B<-no_check_time>, B<-partial_chain>, B<-policy>,
-B<-policy_check>, B<-policy_print>, B<-purpose>, B<-suiteB_128>,
-B<-suiteB_128_only>, B<-suiteB_192>, B<-trusted_first>, B<-use_deltas>,
-B<-auth_level>, B<-verify_depth>, B<-verify_email>, B<-verify_hostname>,
-B<-verify_ip>, B<-verify_name>, B<-x509_strict>
-
-Set various certificate chain validation options. See the
-L<openssl-verify(1)> manual page for details.
 
 =item B<-reconnect>
 
@@ -468,23 +407,6 @@ This option must be provided in order to use a PSK cipher.
 
 Use the pem encoded SSL_SESSION data stored in I<file> as the basis of a PSK.
 Note that this will only work if TLSv1.3 is negotiated.
-
-=item B<-ssl3>, B<-tls1>, B<-tls1_1>, B<-tls1_2>, B<-tls1_3>, B<-no_ssl3>, B<-no_tls1>, B<-no_tls1_1>, B<-no_tls1_2>, B<-no_tls1_3>
-
-These options require or disable the use of the specified SSL or TLS protocols.
-By default, this command will negotiate the highest mutually supported protocol
-version.
-When a specific TLS version is required, only that version will be offered to
-and accepted from the server.
-Note that not all protocols and flags may be available, depending on how
-OpenSSL was built.
-
-=item B<-dtls>, B<-dtls1>, B<-dtls1_2>
-
-These options make this command use DTLS protocols instead of TLS.
-With B<-dtls>, it will negotiate any supported DTLS protocol version,
-whilst B<-dtls1> and B<-dtls1_2> will only support DTLS1.0 and DTLS1.2
-respectively.
 
 =item B<-sctp>
 
@@ -639,13 +561,6 @@ Output SSL session to I<filename>.
 Load SSL session from I<filename>. The client will attempt to resume a
 connection from this session.
 
-=item B<-engine> I<id>
-
-Specifying an engine (by its unique I<id> string) will cause this command
-to attempt to obtain a functional reference to the specified engine,
-thus initialising it if needed. The engine will then be set as the default
-for all available algorithms.
-
 =item B<-serverinfo> I<types>
 
 A list of comma-separated TLS Extension Types (numbers between 0 and
@@ -703,18 +618,29 @@ data and when the server accepts the early data.
 For TLSv1.3 only, send the Post-Handshake Authentication extension. This will
 happen whether or not a certificate has been provided via B<-cert>.
 
-=item I<host>:I<port>
+{- $OpenSSL::safe::opt_version_item -}
 
-Rather than providing B<-connect>, the target hostname and optional port may
-be provided as a single positional argument after all options. If neither this
-nor B<-connect> are provided, falls back to attempting to connect to
-I<localhost> on port I<4433>.
+{- $OpenSSL::safe::opt_name_item -}
 
 {- $OpenSSL::safe::opt_x_item -}
 
 {- $OpenSSL::safe::opt_trust_item -}
 
 {- $OpenSSL::safe::opt_r_item -}
+
+{- $OpenSSL::safe::opt_engine_item -}
+
+{- $OpenSSL::safe::opt_v_item -}
+
+Verification errors are displayed, for debugging, but the command will
+proceed unless the B<-verify_return_error> option is used.
+
+=item I<host>:I<port>
+
+Rather than providing B<-connect>, the target hostname and optional port may
+be provided as a single positional argument after all options. If neither this
+nor B<-connect> are provided, falls back to attempting to connect to
+I<localhost> on port I<4433>.
 
 =back
 

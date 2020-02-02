@@ -637,6 +637,9 @@ int ASN1_item_digest(const ASN1_ITEM *it, const EVP_MD *type, void *data,
 
 int ASN1_item_verify(const ASN1_ITEM *it, X509_ALGOR *algor1,
                      ASN1_BIT_STRING *signature, void *data, EVP_PKEY *pkey);
+int ASN1_item_verify_ctx(const ASN1_ITEM *it, X509_ALGOR *algor1,
+                         ASN1_BIT_STRING *signature, void *data,
+                         EVP_MD_CTX *ctx);
 
 int ASN1_item_sign(const ASN1_ITEM *it, X509_ALGOR *algor1,
                    X509_ALGOR *algor2, ASN1_BIT_STRING *signature, void *data,
@@ -1034,8 +1037,12 @@ int PKCS8_pkey_get0(const ASN1_OBJECT **ppkalg,
 
 const STACK_OF(X509_ATTRIBUTE) *
 PKCS8_pkey_get0_attrs(const PKCS8_PRIV_KEY_INFO *p8);
+int PKCS8_pkey_add1_attr(PKCS8_PRIV_KEY_INFO *p8, X509_ATTRIBUTE *attr);
 int PKCS8_pkey_add1_attr_by_NID(PKCS8_PRIV_KEY_INFO *p8, int nid, int type,
                                 const unsigned char *bytes, int len);
+int PKCS8_pkey_add1_attr_by_OBJ(PKCS8_PRIV_KEY_INFO *p8, const ASN1_OBJECT *obj,
+                                int type, const unsigned char *bytes, int len);
+
 
 int X509_PUBKEY_set0_param(X509_PUBKEY *pub, ASN1_OBJECT *aobj,
                            int ptype, void *pval,

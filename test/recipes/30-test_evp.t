@@ -67,6 +67,12 @@ push @defltfiles, @chachafiles unless disabled("chacha");
 my @bffiles = qw( evpciph_bf.txt );
 push @defltfiles, @bffiles unless disabled("bf");
 
+my @md2files = qw( evpmd_md2.txt );
+push @defltfiles, @md2files unless disabled("md2");
+
+my @mdc2files = qw( evpmd_mdc2.txt );
+push @defltfiles, @mdc2files unless disabled("mdc2");
+
 plan tests =>
     ($no_fips ? 0 : 1)          # FIPS install test
     + (scalar(@configs) * scalar(@files))

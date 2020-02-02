@@ -2753,31 +2753,85 @@ char *SSL_get_shared_ciphers(const SSL *s, char *buf, int size)
     return buf;
 }
 
-/** return a servername extension value if provided in Client Hello, or NULL.
- * So far, only host_name types are defined (RFC 3546).
+/**
+ * Return the requested servername (SNI) value. Note that the behaviour varies
+ * depending on:
+ * - whether this is called by the client or the server,
+ * - if we are before or during/after the handshake,
+ * - if a resumption or normal handshake is being attempted/has occurred
+ * - whether we have negotiated TLSv1.2 (or below) or TLSv1.3
+ * 
+ * Note that only the host_name type is defined (RFC 3546).
  */
-
 const char *SSL_get_servername(const SSL *s, const int type)
 {
+    /*
+     * If we don't know if we are the client or the server yet then we assume
+     * client.
+     */
+    int server = s->handshake_func == NULL ? 0 : s->server;
     if (type != TLSEXT_NAMETYPE_host_name)
         return NULL;
 
-    /*
-     * SNI is not negotiated in pre-TLS-1.3 resumption flows, so fake up an
-     * SNI value to return if we are resuming/resumed.  N.B. that we still
-     * call the relevant callbacks for such resumption flows, and callbacks
-     * might error out if there is not a SNI value available.
-     */
-    if (s->hit)
-        return s->session->ext.hostname;
+    if (server) {
+        /**
+         * Server side
+         * In TLSv1.3 on the server SNI is not associated with the session
+         * but in TLSv1.2 or below it is.
+         *
+         * Before the handshake:
+         *  - return NULL
+         *
+         * During/after the handshake (TLSv1.2 or below resumption occurred):
+         * - If a servername was accepted by the server in the original
+         *   handshake then it will return that servername, or NULL otherwise.
+         *
+         * During/after the handshake (TLSv1.2 or below resumption did not occur):
+         * - The function will return the servername requested by the client in
+         *   this handshake or NULL if none was requested.
+         */
+         if (s->hit && !SSL_IS_TLS13(s))
+            return s->session->ext.hostname;
+    } else {
+        /**
+         * Client side
+         *
+         * Before the handshake:
+         *  - If a servername has been set via a call to
+         *    SSL_set_tlsext_host_name() then it will return that servername
+         *  - If one has not been set, but a TLSv1.2 resumption is being
+         *    attempted and the session from the original handshake had a
+         *    servername accepted by the server then it will return that
+         *    servername
+         *  - Otherwise it returns NULL
+         *
+         * During/after the handshake (TLSv1.2 or below resumption occurred):
+         * - If the session from the orignal handshake had a servername accepted
+         *   by the server then it will return that servername.
+         * - Otherwise it returns the servername set via
+         *   SSL_set_tlsext_host_name() (or NULL if it was not called).
+         *
+         * During/after the handshake (TLSv1.2 or below resumption did not occur):
+         * - It will return the servername set via SSL_set_tlsext_host_name()
+         *   (or NULL if it was not called).
+         */
+        if (SSL_in_before(s)) {
+            if (s->ext.hostname == NULL
+                    && s->session != NULL
+                    && s->session->ssl_version != TLS1_3_VERSION)
+                return s->session->ext.hostname;
+        } else {
+            if (!SSL_IS_TLS13(s) && s->hit && s->session->ext.hostname != NULL)
+                return s->session->ext.hostname;
+        }
+    }
+
     return s->ext.hostname;
 }
 
 int SSL_get_servername_type(const SSL *s)
 {
-    if (s->session
-        && (!s->ext.hostname ? s->session->
-            ext.hostname : s->ext.hostname))
+    if (SSL_get_servername(s, TLSEXT_NAMETYPE_host_name) != NULL)
         return TLSEXT_NAMETYPE_host_name;
     return -1;
 }
@@ -3032,12 +3086,13 @@ static int ssl_session_cmp(const SSL_SESSION *a, const SSL_SESSION *b)
  * via ssl.h.
  */
 
-SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
+SSL_CTX *SSL_CTX_new_with_libctx(OPENSSL_CTX *libctx, const char *propq,
+                                 const SSL_METHOD *meth)
 {
     SSL_CTX *ret = NULL;
 
     if (meth == NULL) {
-        SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_NULL_SSL_METHOD_PASSED);
+        SSLerr(0, SSL_R_NULL_SSL_METHOD_PASSED);
         return NULL;
     }
 
@@ -3045,12 +3100,19 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
         return NULL;
 
     if (SSL_get_ex_data_X509_STORE_CTX_idx() < 0) {
-        SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_X509_VERIFICATION_SETUP_PROBLEMS);
+        SSLerr(0, SSL_R_X509_VERIFICATION_SETUP_PROBLEMS);
         goto err;
     }
     ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL)
         goto err;
+
+    ret->libctx = libctx;
+    if (propq != NULL) {
+        ret->propq = OPENSSL_strdup(propq);
+        if (ret->propq == NULL)
+            goto err;
+    }
 
     ret->method = meth;
     ret->min_proto_version = 0;
@@ -3063,7 +3125,7 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
     ret->references = 1;
     ret->lock = CRYPTO_THREAD_lock_new();
     if (ret->lock == NULL) {
-        SSLerr(SSL_F_SSL_CTX_NEW, ERR_R_MALLOC_FAILURE);
+        SSLerr(0, ERR_R_MALLOC_FAILURE);
         OPENSSL_free(ret);
         return NULL;
     }
@@ -3092,7 +3154,7 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
                                 &ret->cipher_list, &ret->cipher_list_by_id,
                                 OSSL_default_cipher_list(), ret->cert)
         || sk_SSL_CIPHER_num(ret->cipher_list) <= 0) {
-        SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_LIBRARY_HAS_NO_CIPHERS);
+        SSLerr(0, SSL_R_LIBRARY_HAS_NO_CIPHERS);
         goto err2;
     }
 
@@ -3101,11 +3163,11 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
         goto err;
 
     if ((ret->md5 = EVP_get_digestbyname("ssl3-md5")) == NULL) {
-        SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_UNABLE_TO_LOAD_SSL3_MD5_ROUTINES);
+        SSLerr(0, SSL_R_UNABLE_TO_LOAD_SSL3_MD5_ROUTINES);
         goto err2;
     }
     if ((ret->sha1 = EVP_get_digestbyname("ssl3-sha1")) == NULL) {
-        SSLerr(SSL_F_SSL_CTX_NEW, SSL_R_UNABLE_TO_LOAD_SSL3_SHA1_ROUTINES);
+        SSLerr(0, SSL_R_UNABLE_TO_LOAD_SSL3_SHA1_ROUTINES);
         goto err2;
     }
 
@@ -3129,16 +3191,16 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
     ret->split_send_fragment = SSL3_RT_MAX_PLAIN_LENGTH;
 
     /* Setup RFC5077 ticket keys */
-    if ((RAND_bytes(ret->ext.tick_key_name,
-                    sizeof(ret->ext.tick_key_name)) <= 0)
-        || (RAND_priv_bytes(ret->ext.secure->tick_hmac_key,
-                       sizeof(ret->ext.secure->tick_hmac_key)) <= 0)
-        || (RAND_priv_bytes(ret->ext.secure->tick_aes_key,
-                       sizeof(ret->ext.secure->tick_aes_key)) <= 0))
+    if ((RAND_bytes_ex(libctx, ret->ext.tick_key_name,
+                       sizeof(ret->ext.tick_key_name)) <= 0)
+        || (RAND_priv_bytes_ex(libctx, ret->ext.secure->tick_hmac_key,
+                               sizeof(ret->ext.secure->tick_hmac_key)) <= 0)
+        || (RAND_priv_bytes_ex(libctx, ret->ext.secure->tick_aes_key,
+                               sizeof(ret->ext.secure->tick_aes_key)) <= 0))
         ret->options |= SSL_OP_NO_TICKET;
 
-    if (RAND_priv_bytes(ret->ext.cookie_hmac_key,
-                   sizeof(ret->ext.cookie_hmac_key)) <= 0)
+    if (RAND_priv_bytes_ex(libctx, ret->ext.cookie_hmac_key,
+                           sizeof(ret->ext.cookie_hmac_key)) <= 0)
         goto err;
 
 #ifndef OPENSSL_NO_SRP
@@ -3215,10 +3277,15 @@ SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
 
     return ret;
  err:
-    SSLerr(SSL_F_SSL_CTX_NEW, ERR_R_MALLOC_FAILURE);
+    SSLerr(0, ERR_R_MALLOC_FAILURE);
  err2:
     SSL_CTX_free(ret);
     return NULL;
+}
+
+SSL_CTX *SSL_CTX_new(const SSL_METHOD *meth)
+{
+    return SSL_CTX_new_with_libctx(NULL, NULL, meth);
 }
 
 int SSL_CTX_up_ref(SSL_CTX *ctx)
@@ -3293,6 +3360,8 @@ void SSL_CTX_free(SSL_CTX *a)
     OPENSSL_secure_free(a->ext.secure);
 
     CRYPTO_THREAD_lock_free(a->lock);
+
+    OPENSSL_free(a->propq);
 
     OPENSSL_free(a);
 }

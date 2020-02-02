@@ -1,9 +1,5 @@
 =pod
-
-=begin comment
-{- join("\n", @autowarntext) -}
-
-=end comment
+{- OpenSSL::safe::output_do_not_edit_headers(); -}
 
 =head1 NAME
 
@@ -14,6 +10,7 @@ openssl-gendsa - generate a DSA private key from a set of parameters
 B<openssl> B<gendsa>
 [B<-help>]
 [B<-out> I<filename>]
+[B<-passout> I<arg>]
 [B<-aes128>]
 [B<-aes192>]
 [B<-aes256>]
@@ -26,9 +23,9 @@ B<openssl> B<gendsa>
 [B<-des>]
 [B<-des3>]
 [B<-idea>]
-[B<-engine> I<id>]
 [B<-verbose>]
 {- $OpenSSL::safe::opt_r_synopsis -}
+{- $OpenSSL::safe::opt_engine_synopsis -}
 [I<paramfile>]
 
 =for openssl ifdef engine
@@ -51,30 +48,30 @@ Print out a usage message.
 Output the key to the specified file. If this argument is not specified then
 standard output is used.
 
+=item B<-passout> I<arg>
+
+The passphrase used for the output file.
+See L<openssl(1)/Pass Phrase Options>.
+
 =item B<-aes128>, B<-aes192>, B<-aes256>, B<-aria128>, B<-aria192>, B<-aria256>, B<-camellia128>, B<-camellia192>, B<-camellia256>, B<-des>, B<-des3>, B<-idea>
 
 These options encrypt the private key with specified
 cipher before outputting it. A pass phrase is prompted for.
 If none of these options is specified no encryption is used.
 
-=item B<-engine> I<id>
-
-Specifying an engine (by its unique I<id> string) will cause this command
-to attempt to obtain a functional reference to the specified engine,
-thus initialising it if needed. The engine will then be set as the default
-for all available algorithms.
-
 =item B<-verbose>
 
 Print extra details about the operations being performed.
+
+{- $OpenSSL::safe::opt_r_item -}
+
+{- $OpenSSL::safe::opt_engine_item -}
 
 =item I<paramfile>
 
 The DSA parameter file to use. The parameters in this file determine
 the size of the private key. DSA parameters can be generated and
 examined using the L<openssl-dsaparam(1)> command.
-
-{- $OpenSSL::safe::opt_r_item -}
 
 =back
 

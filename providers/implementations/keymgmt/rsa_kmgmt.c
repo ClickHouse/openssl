@@ -10,7 +10,9 @@
 #include <openssl/core_numbers.h>
 #include <openssl/core_names.h>
 #include <openssl/bn.h>
+#include <openssl/err.h>
 #include <openssl/rsa.h>
+#include <openssl/evp.h>
 #include <openssl/params.h>
 #include <openssl/types.h>
 #include "internal/param_build.h"
@@ -20,6 +22,12 @@
 
 static OSSL_OP_keymgmt_importkey_fn rsa_importkey;
 static OSSL_OP_keymgmt_exportkey_fn rsa_exportkey;
+static OSSL_OP_keymgmt_get_key_params_fn rsa_get_key_params;
+static OSSL_OP_keymgmt_validate_public_fn rsa_validatekey_public;
+static OSSL_OP_keymgmt_validate_private_fn rsa_validatekey_private;
+static OSSL_OP_keymgmt_validate_pairwise_fn rsa_validatekey_pairwise;
+
+#define RSA_DEFAULT_MD "SHA256"
 
 DEFINE_STACK_OF(BIGNUM)
 DEFINE_SPECIAL_STACK_OF_CONST(BIGNUM_const, BIGNUM)
@@ -244,11 +252,78 @@ static const OSSL_PARAM *rsa_importkey_types(void)
     return rsa_key_types;
 }
 
+static int rsa_get_key_params(void *key, OSSL_PARAM params[])
+{
+    RSA *rsa = key;
+    OSSL_PARAM *p;
+
+    if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_BITS)) != NULL
+        && !OSSL_PARAM_set_int(p, RSA_bits(rsa)))
+        return 0;
+    if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_SECURITY_BITS)) != NULL
+        && !OSSL_PARAM_set_int(p, RSA_security_bits(rsa)))
+        return 0;
+    if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_MAX_SIZE)) != NULL
+        && !OSSL_PARAM_set_int(p, RSA_size(rsa)))
+        return 0;
+
+# if 0                           /* PSS support pending */
+    if ((p = OSSL_PARAM_locate(params,
+                               OSSL_PKEY_PARAM_MANDATORY_DIGEST)) != NULL
+        && RSA_get0_pss_params(rsa) != NULL) {
+        const EVP_MD *md, *mgf1md;
+        int min_saltlen;
+
+        if (!rsa_pss_get_param(RSA_get0_pss_params(rsa),
+                               &md, &mgf1md, &min_saltlen)) {
+            ERR_raise(ERR_LIB_PROV, ERR_R_INTERNAL_ERROR);
+            return 0;
+        }
+        if (!OSSL_PARAM_set_utf8_string(p, EVP_MD_name(md)))
+            return 0;
+    }
+#endif
+    if ((p = OSSL_PARAM_locate(params, OSSL_PKEY_PARAM_DEFAULT_DIGEST)) != NULL
+        && RSA_get0_pss_params(rsa) == NULL)
+        if (!OSSL_PARAM_set_utf8_string(p, RSA_DEFAULT_MD))
+            return 0;
+
+    return 1;
+}
+
+static int rsa_validatekey_public(void *key)
+{
+    RSA *rsa = key;
+
+    return rsa_validate_public(rsa);
+}
+
+static int rsa_validatekey_private(void *key)
+{
+    RSA *rsa = key;
+
+    return rsa_validate_private(rsa);
+}
+
+static int rsa_validatekey_pairwise(void *key)
+{
+    RSA *rsa = key;
+
+    return rsa_validate_pairwise(rsa);
+}
+
 const OSSL_DISPATCH rsa_keymgmt_functions[] = {
     { OSSL_FUNC_KEYMGMT_IMPORTKEY, (void (*)(void))rsa_importkey },
     { OSSL_FUNC_KEYMGMT_IMPORTKEY_TYPES, (void (*)(void))rsa_importkey_types },
     { OSSL_FUNC_KEYMGMT_EXPORTKEY, (void (*)(void))rsa_exportkey },
     { OSSL_FUNC_KEYMGMT_EXPORTKEY_TYPES, (void (*)(void))rsa_exportkey_types },
     { OSSL_FUNC_KEYMGMT_FREEKEY, (void (*)(void))RSA_free },
+    { OSSL_FUNC_KEYMGMT_GET_KEY_PARAMS,  (void (*) (void))rsa_get_key_params },
+    { OSSL_FUNC_KEYMGMT_VALIDATE_PUBLIC,
+          (void (*)(void))rsa_validatekey_public },
+    { OSSL_FUNC_KEYMGMT_VALIDATE_PRIVATE,
+          (void (*)(void))rsa_validatekey_private },
+    { OSSL_FUNC_KEYMGMT_VALIDATE_PAIRWISE,
+          (void (*)(void))rsa_validatekey_pairwise },
     { 0, NULL }
 };

@@ -1,9 +1,5 @@
 =pod
-
-=begin comment
-{- join("\n", @autowarntext) -}
-
-=end comment
+{- OpenSSL::safe::output_do_not_edit_headers(); -}
 
 =head1 NAME
 
@@ -34,35 +30,8 @@ B<openssl> B<ocsp>
 [B<-host> I<host>:I<port>]
 [B<-multi> I<process-count>]
 [B<-header>]
+[B<-timeout> I<seconds>]
 [B<-path>]
-[B<-attime> I<timestamp>]
-[B<-check_ss_sig>]
-[B<-crl_check>]
-[B<-crl_check_all>]
-[B<-explicit_policy>]
-[B<-extended_crl>]
-[B<-ignore_critical>]
-[B<-inhibit_any>]
-[B<-inhibit_map>]
-[B<-no_check_time>]
-[B<-partial_chain>]
-[B<-policy> I<arg>]
-[B<-policy_check>]
-[B<-policy_print>]
-[B<-purpose> I<purpose>]
-[B<-suiteB_128>]
-[B<-suiteB_128_only>]
-[B<-suiteB_192>]
-[B<-trusted_first>]
-[B<-no_alt_chains>]
-[B<-use_deltas>]
-[B<-auth_level> I<num>]
-[B<-verify_depth> I<num>]
-[B<-verify_email> I<email>]
-[B<-verify_hostname> I<hostname>]
-[B<-verify_ip> I<ip>]
-[B<-verify_name> I<name>]
-[B<-x509_strict>]
 [B<-VAfile> I<file>]
 [B<-validity_period> I<n>]
 [B<-status_age> I<n>]
@@ -81,8 +50,11 @@ B<openssl> B<ocsp>
 [B<-CA> I<file>]
 [B<-rsigner> I<file>]
 [B<-rkey> I<file>]
+[B<-passin> I<arg>]
 [B<-rother> I<file>]
 [B<-rsigopt> I<nm>:I<v>]
+[B<-rmd> I<digest>]
+[B<-badsig>]
 [B<-resp_no_certs>]
 [B<-nmin> I<n>]
 [B<-ndays> I<n>]
@@ -91,6 +63,7 @@ B<openssl> B<ocsp>
 [B<-rcid> I<digest>]
 [B<-I<digest>>]
 {- $OpenSSL::safe::opt_trust_synopsis -}
+{- $OpenSSL::safe::opt_v_synopsis -}
 
 =for openssl ifdef multi
 
@@ -209,17 +182,6 @@ each child is willing to wait for the client's OCSP response.
 This option is available on POSIX systems (that support the fork() and other
 required unix system-calls).
 
-=item B<-attime>, B<-check_ss_sig>, B<-crl_check>, B<-crl_check_all>,
-B<-explicit_policy>, B<-extended_crl>, B<-ignore_critical>, B<-inhibit_any>,
-B<-inhibit_map>, B<-no_alt_chains>, B<-no_check_time>, B<-partial_chain>, B<-policy>,
-B<-policy_check>, B<-policy_print>, B<-purpose>, B<-suiteB_128>,
-B<-suiteB_128_only>, B<-suiteB_192>, B<-trusted_first>, B<-use_deltas>,
-B<-auth_level>, B<-verify_depth>, B<-verify_email>, B<-verify_hostname>,
-B<-verify_ip>, B<-verify_name>, B<-x509_strict>
-
-Set different certificate verification options.
-See L<openssl-verify(1)> manual page for details.
-
 =item B<-verify_other> I<file>
 
 File containing additional certificates to search when attempting to locate
@@ -310,6 +272,8 @@ digest used by subsequent certificate identifiers.
 
 {- $OpenSSL::safe::opt_trust_item -}
 
+{- $OpenSSL::safe::opt_v_item -}
+
 =back
 
 =head2 OCSP Server Options
@@ -357,10 +321,24 @@ subject name.
 The private key to sign OCSP responses with: if not present the file
 specified in the B<-rsigner> option is used.
 
+=item B<-passin> I<arg>
+
+The private key password source. For more information about the format of I<arg>
+see L<openssl(1)/Pass Phrase Options>.
+
 =item B<-rsigopt> I<nm>:I<v>
 
 Pass options to the signature algorithm when signing OCSP responses.
 Names and values of these options are algorithm-specific.
+
+=item B<-rmd> I<digest>
+
+The digest to use when signing the response.
+
+=item B<-badsig>
+
+Corrupt the response signature before writing it; this can be useful
+for testing.
 
 =item B<-port> I<portnum>
 

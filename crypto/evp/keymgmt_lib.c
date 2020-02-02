@@ -7,6 +7,7 @@
  * https://www.openssl.org/source/license.html
  */
 
+#include <openssl/core_names.h>
 #include "internal/cryptlib.h"
 #include "internal/nelem.h"
 #include "crypto/evp.h"
@@ -17,7 +18,7 @@
 
 struct import_data_st {
     void *provctx;
-    void *(*importfn)(void *provctx, const OSSL_PARAM params[]);
+    void *(*importfn)(const EVP_KEYMGMT *keymgmt, const OSSL_PARAM params[]);
 
     /* Result */
     void *provdata;
@@ -91,7 +92,9 @@ void *evp_keymgmt_export_to_provider(EVP_PKEY *pk, EVP_KEYMGMT *keymgmt,
         struct import_data_st import_data;
 
         import_data.importfn =
-            want_domainparams ? keymgmt->importdomparams : keymgmt->importkey;
+            want_domainparams
+            ? evp_keymgmt_importdomparams
+            : evp_keymgmt_importkey;
         import_data.provdata = NULL;
 
         /*
@@ -101,10 +104,11 @@ void *evp_keymgmt_export_to_provider(EVP_PKEY *pk, EVP_KEYMGMT *keymgmt,
             return NULL;
 
         for (j = 0; j < i && pk->pkeys[j].keymgmt != NULL; j++) {
-            int (*exportfn)(void *provctx, OSSL_CALLBACK *cb, void *cbarg) =
+            int (*exportfn)(const EVP_KEYMGMT *keymgmt, void *provdata,
+                            OSSL_CALLBACK *cb, void *cbarg) =
                 want_domainparams
-                ? pk->pkeys[j].keymgmt->exportdomparams
-                : pk->pkeys[j].keymgmt->exportkey;
+                ? evp_keymgmt_exportdomparams
+                : evp_keymgmt_exportkey;
 
             if (exportfn != NULL) {
                 import_data.provctx =
@@ -118,7 +122,8 @@ void *evp_keymgmt_export_to_provider(EVP_PKEY *pk, EVP_KEYMGMT *keymgmt,
                  * forgets to check the return value.
 
                  */
-                if (exportfn(pk->pkeys[j].provdata, &try_import, &import_data)
+                if (exportfn(pk->pkeys[j].keymgmt, pk->pkeys[j].provdata,
+                             &try_import, &import_data)
                     && (provdata = import_data.provdata) != NULL)
                     break;
             }
@@ -132,12 +137,7 @@ void *evp_keymgmt_export_to_provider(EVP_PKEY *pk, EVP_KEYMGMT *keymgmt,
      */
     j = ossl_assert(i < OSSL_NELEM(pk->pkeys));
 
-    if (provdata != NULL) {
-        EVP_KEYMGMT_up_ref(keymgmt);
-        pk->pkeys[i].keymgmt = keymgmt;
-        pk->pkeys[i].provdata = provdata;
-        pk->pkeys[i].domainparams = want_domainparams;
-    }
+    evp_keymgmt_cache_pkey(pk, i, keymgmt, provdata, want_domainparams);
 
     return provdata;
 }
@@ -156,10 +156,53 @@ void evp_keymgmt_clear_pkey_cache(EVP_PKEY *pk)
             pk->pkeys[i].keymgmt = NULL;
             pk->pkeys[i].provdata = NULL;
             if (pk->pkeys[i].domainparams)
-                keymgmt->freedomparams(provdata);
+                evp_keymgmt_freedomparams(keymgmt, provdata);
             else
-                keymgmt->freekey(provdata);
+                evp_keymgmt_freekey(keymgmt, provdata);
             EVP_KEYMGMT_free(keymgmt);
+        }
+
+        pk->cache.size = 0;
+        pk->cache.bits = 0;
+        pk->cache.security_bits = 0;
+    }
+}
+
+void evp_keymgmt_cache_pkey(EVP_PKEY *pk, size_t index, EVP_KEYMGMT *keymgmt,
+                            void *provdata, int domainparams)
+{
+    if (provdata != NULL) {
+        EVP_KEYMGMT_up_ref(keymgmt);
+        pk->pkeys[index].keymgmt = keymgmt;
+        pk->pkeys[index].provdata = provdata;
+        pk->pkeys[index].domainparams = domainparams;
+
+        /*
+         * Cache information about the domain parameters or key.  Only needed
+         * for the "original" provider side key.
+         *
+         * This services functions like EVP_PKEY_size, EVP_PKEY_bits, etc
+         */
+        if (index == 0) {
+            int ok;
+            int bits = 0;
+            int security_bits = 0;
+            int size = 0;
+            OSSL_PARAM params[4];
+
+            params[0] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_BITS, &bits);
+            params[1] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_SECURITY_BITS,
+                                                 &security_bits);
+            params[2] = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_MAX_SIZE, &size);
+            params[3] = OSSL_PARAM_construct_end();
+            ok = domainparams
+                ? evp_keymgmt_get_domparam_params(keymgmt, provdata, params)
+                : evp_keymgmt_get_key_params(keymgmt, provdata, params);
+            if (ok) {
+                pk->cache.size = size;
+                pk->cache.bits = bits;
+                pk->cache.security_bits = security_bits;
+            }
         }
     }
 }
@@ -167,18 +210,12 @@ void evp_keymgmt_clear_pkey_cache(EVP_PKEY *pk)
 void *evp_keymgmt_fromdata(EVP_PKEY *target, EVP_KEYMGMT *keymgmt,
                            const OSSL_PARAM params[], int domainparams)
 {
-    void *provctx = ossl_provider_ctx(EVP_KEYMGMT_provider(keymgmt));
     void *provdata = domainparams
-        ? keymgmt->importdomparams(provctx, params)
-        : keymgmt->importkey(provctx, params);
+        ? evp_keymgmt_importdomparams(keymgmt, params)
+        : evp_keymgmt_importkey(keymgmt, params);
 
     evp_keymgmt_clear_pkey_cache(target);
-    if (provdata != NULL) {
-        EVP_KEYMGMT_up_ref(keymgmt);
-        target->pkeys[0].keymgmt = keymgmt;
-        target->pkeys[0].provdata = provdata;
-        target->pkeys[0].domainparams = domainparams;
-    }
+    evp_keymgmt_cache_pkey(target, 0, keymgmt, provdata, domainparams);
 
     return provdata;
 }
@@ -226,6 +263,22 @@ const OSSL_PARAM *evp_keymgmt_importdomparam_types(const EVP_KEYMGMT *keymgmt)
 const OSSL_PARAM *evp_keymgmt_exportdomparam_types(const EVP_KEYMGMT *keymgmt)
 {
     return keymgmt->exportdomparam_types();
+}
+
+int evp_keymgmt_get_domparam_params(const EVP_KEYMGMT *keymgmt,
+                                     void *provdomparams, OSSL_PARAM params[])
+{
+    if (keymgmt->get_domparam_params == NULL)
+        return 1;
+    return keymgmt->get_domparam_params(provdomparams, params);
+}
+
+const OSSL_PARAM *
+evp_keymgmt_gettable_domparam_params(const EVP_KEYMGMT *keymgmt)
+{
+    if (keymgmt->gettable_domparam_params == NULL)
+        return NULL;
+    return keymgmt->gettable_domparam_params();
 }
 
 
@@ -276,4 +329,42 @@ const OSSL_PARAM *evp_keymgmt_importkey_types(const EVP_KEYMGMT *keymgmt)
 const OSSL_PARAM *evp_keymgmt_exportkey_types(const EVP_KEYMGMT *keymgmt)
 {
     return keymgmt->exportkey_types();
+}
+
+int evp_keymgmt_get_key_params(const EVP_KEYMGMT *keymgmt,
+                               void *provkey, OSSL_PARAM params[])
+{
+    if (keymgmt->get_key_params == NULL)
+        return 1;
+    return keymgmt->get_key_params(provkey, params);
+}
+
+const OSSL_PARAM *evp_keymgmt_gettable_key_params(const EVP_KEYMGMT *keymgmt)
+{
+    if (keymgmt->gettable_key_params == NULL)
+        return NULL;
+    return keymgmt->gettable_key_params();
+}
+
+int evp_keymgmt_validate_domparams(const EVP_KEYMGMT *keymgmt, void *provkey)
+{
+    /* if domainparams are not supported - then pass */
+    if (keymgmt->validatedomparams == NULL)
+        return 1;
+    return keymgmt->validatedomparams(provkey);
+}
+
+int evp_keymgmt_validate_public(const EVP_KEYMGMT *keymgmt, void *provkey)
+{
+    return keymgmt->validatepublic(provkey);
+}
+
+int evp_keymgmt_validate_private(const EVP_KEYMGMT *keymgmt, void *provkey)
+{
+    return keymgmt->validateprivate(provkey);
+}
+
+int evp_keymgmt_validate_pairwise(const EVP_KEYMGMT *keymgmt, void *provkey)
+{
+    return keymgmt->validatepairwise(provkey);
 }
