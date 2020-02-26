@@ -359,7 +359,14 @@ static ssize_t syscall_random(void *buf, size_t buflen)
      * - Linux since 3.17 with glibc 2.25
      * - FreeBSD since 12.0 (1200061)
      */
-#  if defined(__GNUC__) && __GNUC__>=2 && defined(__ELF__) && !defined(__hpux)
+
+    /** This fragment was edited for ClickHouse.
+      * We disable the usage of "getentropy" function from libc (on static link time) to avoid dependency on too new libc version.
+      * Otherwise, if we build ClickHouse on a system with new libc and run the built binary on a system with old libc, it will fail.
+      *
+      * Note that there is a fallback below to (1) runtime symbol lookup and (2) direct syscall, that are equivalent.
+      */
+#  if 0 && defined(__GNUC__) && __GNUC__>=2 && defined(__ELF__) && !defined(__hpux)
     extern int getentropy(void *buffer, size_t length) __attribute__((weak));
 
     if (getentropy != NULL)
