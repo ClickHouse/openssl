@@ -101,6 +101,16 @@ void OPENSSL_cpuid_setup(void)
     IA32CAP vec;
     const variant_char *env;
 
+#if defined(__has_feature)
+# if __has_feature(memory_sanitizer)
+    /// This function is called from .init section before memory sanitizer mmaps shadow memory.
+    /// Manually call __msan_init() to initialize it.
+    /// Otherwise, program will crash with segmentation fault when thying access `trigger`,
+    /// because its address was replaced with some not mapped address.
+    __msan_init();
+# endif
+#endif
+
     if (trigger)
         return;
 
