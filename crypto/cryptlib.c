@@ -107,7 +107,12 @@ void OPENSSL_cpuid_setup(void)
     /// Manually call __msan_init() to initialize it.
     /// Otherwise, program will crash with segmentation fault when thying access `trigger`,
     /// because its address was replaced with some not mapped address.
+#if __clang_major__ >= 9
     __msan_init();
+#else
+    /// Workaround for "error in backend: Sanitizer interface function redefined" in clang-8
+    __asm__ __volatile__("callq __msan_init": : :"memory", "cc", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "st");
+#endif
 # endif
 #endif
 
