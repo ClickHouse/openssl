@@ -111,7 +111,14 @@ void OPENSSL_cpuid_setup(void)
     __msan_init();
 #else
     /// Workaround for "error in backend: Sanitizer interface function redefined" in clang-8
-    __asm__ __volatile__("callq __msan_init": : :"memory", "cc", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "st");
+    __asm__ __volatile__("callq __msan_init": : :
+                         "memory", "cc",
+                         "rax", "rcx", "rdx", "rsi", "rdi",
+                         "r8", "r9", "r10", "r11", "st",
+                         "mmx0", "mmx1", "mmx2", "mmx3", "mmx4", "mmx5", "mmx6", "mmx7",
+                         "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7",
+                         "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15"
+                         );
 #endif
 # endif
 #endif
