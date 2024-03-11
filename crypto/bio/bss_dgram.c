@@ -48,44 +48,41 @@
 #define M_METHOD_RECVFROM 3
 #define M_METHOD_WSARECVMSG 4
 
-#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
-#if !(__GLIBC_PREREQ(2, 14))
-#undef NO_RECVMMSG
-/*
- * Some old glibc versions may have recvmmsg and MSG_WAITFORONE flag, but
- * not sendmmsg. We need both so force this to be disabled on these old
- * versions
- */
-#define NO_RECVMMSG
-#endif
-#endif
-#if defined(__GNU__)
-/* GNU/Hurd does not have IP_PKTINFO yet */
-#undef NO_RECVMSG
-#define NO_RECVMSG
-#endif
-#if (defined(__ANDROID_API__) && __ANDROID_API__ < 21)
-#undef NO_RECVMMSG
-#define NO_RECVMMSG
-#endif
-#if defined(_AIX) && !defined(_AIX72)
-/* AIX >= 7.2 provides sendmmsg() and recvmmsg(). */
-#undef NO_RECVMMSG
-#define NO_RECVMMSG
-#endif
-#if !defined(M_METHOD)
-#if defined(OPENSSL_SYS_WINDOWS) && defined(BIO_HAVE_WSAMSG) && !defined(NO_WSARECVMSG)
-#define M_METHOD M_METHOD_WSARECVMSG
-#elif !defined(OPENSSL_SYS_WINDOWS) && defined(MSG_WAITFORONE) && !defined(NO_RECVMMSG)
-#define M_METHOD M_METHOD_RECVMMSG
-#elif !defined(OPENSSL_SYS_WINDOWS) && defined(CMSG_LEN) && !defined(NO_RECVMSG)
-#define M_METHOD M_METHOD_RECVMSG
-#elif !defined(NO_RECVFROM)
-#define M_METHOD M_METHOD_RECVFROM
-#else
-#define M_METHOD M_METHOD_NONE
-#endif
-#endif
+# if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
+/// ClickHouse-specific patch: Pretend to use a stone age glibc because we use a stone age glibc.
+/// Otherwise, system calls sendmmsg and recvmmsg are used which work only with too-new glibc 2.14.
+/// #  if !(__GLIBC_PREREQ(2, 14))
+#   undef NO_RECVMMSG
+    /*
+     * Some old glibc versions may have recvmmsg and MSG_WAITFORONE flag, but
+     * not sendmmsg. We need both so force this to be disabled on these old
+     * versions
+     */
+#   define NO_RECVMMSG
+/// #  endif
+# endif
+# if defined(__GNU__)
+   /* GNU/Hurd does not have IP_PKTINFO yet */
+   #undef NO_RECVMSG
+   #define NO_RECVMSG
+# endif
+# if (defined(__ANDROID_API__) && __ANDROID_API__ < 21) || defined(_AIX)
+#  undef NO_RECVMMSG
+#  define NO_RECVMMSG
+# endif
+# if !defined(M_METHOD)
+#  if defined(OPENSSL_SYS_WINDOWS) && defined(BIO_HAVE_WSAMSG) && !defined(NO_WSARECVMSG)
+#   define M_METHOD  M_METHOD_WSARECVMSG
+#  elif !defined(OPENSSL_SYS_WINDOWS) && defined(MSG_WAITFORONE) && !defined(NO_RECVMMSG)
+#   define M_METHOD  M_METHOD_RECVMMSG
+#  elif !defined(OPENSSL_SYS_WINDOWS) && defined(CMSG_LEN) && !defined(NO_RECVMSG)
+#   define M_METHOD  M_METHOD_RECVMSG
+#  elif !defined(NO_RECVFROM)
+#   define M_METHOD  M_METHOD_RECVFROM
+#  else
+#   define M_METHOD  M_METHOD_NONE
+#  endif
+# endif
 
 #if defined(OPENSSL_SYS_WINDOWS)
 #define BIO_CMSG_SPACE(x) WSA_CMSG_SPACE(x)
