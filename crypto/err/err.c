@@ -25,6 +25,12 @@
 #include "internal/e_os.h"
 #include "err_local.h"
 
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#include <sanitizer/lsan_interface.h>
+# endif
+#endif
+
 #ifndef OPENSSL_NO_ERR
 static int err_load_strings(const ERR_STRING_DATA *str);
 #endif
@@ -670,7 +676,17 @@ ERR_STATE *ossl_err_get_state_int(int save_sys_error)
                 CRYPTO_THREAD_NO_CONTEXT, (ERR_STATE *)-1))
             return NULL;
 
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_disable();
+# endif
+#endif
         state = OSSL_ERR_STATE_new();
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_enable();
+# endif
+#endif
         if (state == NULL) {
             CRYPTO_THREAD_set_local_ex(CRYPTO_THREAD_LOCAL_ERR_KEY,
                 CRYPTO_THREAD_NO_CONTEXT, NULL);
