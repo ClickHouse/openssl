@@ -26,6 +26,12 @@
 #include "internal/e_os.h"
 #include "err_local.h"
 
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#include <sanitizer/lsan_interface.h>
+# endif
+#endif
+
 /* Forward declaration in case it's not published because of configuration */
 ERR_STATE *ERR_get_state(void);
 
@@ -688,7 +694,17 @@ ERR_STATE *ossl_err_get_state_int(void)
         if (!CRYPTO_THREAD_set_local(&err_thread_local, (ERR_STATE*)-1))
             return NULL;
 
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_disable();
+# endif
+#endif
         state = OSSL_ERR_STATE_new();
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_enable();
+# endif
+#endif
         if (state == NULL) {
             CRYPTO_THREAD_set_local(&err_thread_local, NULL);
             return NULL;
