@@ -103,6 +103,13 @@ static RAND_GLOBAL *rand_get_global(OSSL_LIB_CTX *libctx)
     return ossl_lib_ctx_get_data(libctx, OSSL_LIB_CTX_DRBG_INDEX);
 }
 
+
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#include <sanitizer/lsan_interface.h>
+# endif
+#endif
+
 #ifndef FIPS_MODULE
 #include <stdio.h>
 #include <time.h>
@@ -862,8 +869,18 @@ static EVP_RAND_CTX *rand_get0_public(OSSL_LIB_CTX *ctx, RAND_GLOBAL *dgbl)
         if (CRYPTO_THREAD_get_local(&dgbl->private) == NULL
             && !ossl_init_thread_start(NULL, ctx, rand_delete_thread_state))
             return NULL;
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_disable();
+# endif
+#endif
         rand = rand_new_drbg(ctx, primary, SECONDARY_RESEED_INTERVAL,
-            SECONDARY_RESEED_TIME_INTERVAL);
+                             SECONDARY_RESEED_TIME_INTERVAL);
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_enable();
+# endif
+#endif
         CRYPTO_THREAD_set_local(&dgbl->public, rand);
     }
     return rand;
