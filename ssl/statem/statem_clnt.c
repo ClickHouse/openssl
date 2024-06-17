@@ -2698,7 +2698,7 @@ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL_CONNECTION *s,
             && (!PACKET_get_net_4(pkt, &age_add)
                 || !PACKET_get_length_prefixed_1(pkt, &nonce)))
         || !PACKET_get_net_2(pkt, &ticklen)
-        || (SSL_CONNECTION_IS_TLS13(s) ? (ticklen == 0 
+        || (SSL_CONNECTION_IS_TLS13(s) ? (ticklen == 0
                                           || PACKET_remaining(pkt) < ticklen)
                                        : PACKET_remaining(pkt) != ticklen)) {
         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_R_LENGTH_MISMATCH);
@@ -2728,10 +2728,19 @@ MSG_PROCESS_RETURN tls_process_new_session_ticket(SSL_CONNECTION *s,
          * We reused an existing session, so we need to replace it with a new
          * one
          */
-        if ((new_sess = ssl_session_dup(s->session, 0)) == 0) {
+        if (!CRYPTO_THREAD_write_lock(s->session_ctx->lock))
+        {
             SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_SSL_LIB);
             goto err;
         }
+
+        if ((new_sess = ssl_session_dup(s->session, 0)) == 0) {
+            CRYPTO_THREAD_unlock(s->session_ctx->lock);
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_SSL_LIB);
+            goto err;
+        }
+
+        CRYPTO_THREAD_unlock(s->session_ctx->lock);
 
         if ((s->session_ctx->session_cache_mode & SSL_SESS_CACHE_CLIENT) != 0
                 && !SSL_CONNECTION_IS_TLS13(s)) {
