@@ -12,6 +12,12 @@
 #include <openssl/rand.h>
 #include "internal/refcount.h"
 
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+#include <sanitizer/lsan_interface.h>
+# endif
+#endif
+
 CRYPTO_RWLOCK *global_engine_lock;
 
 CRYPTO_ONCE engine_lock_init = CRYPTO_ONCE_STATIC_INIT;
@@ -33,8 +39,18 @@ ENGINE *ENGINE_new(void)
         ERR_raise(ERR_LIB_ENGINE, ERR_R_CRYPTO_LIB);
         return 0;
     }
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_disable();
+# endif
+#endif
     if ((ret = OPENSSL_zalloc(sizeof(*ret))) == NULL)
         return NULL;
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_enable();
+# endif
+#endif
     if (!CRYPTO_NEW_REF(&ret->struct_ref, 1)) {
         OPENSSL_free(ret);
         return NULL;
