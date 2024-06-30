@@ -830,8 +830,18 @@ EVP_RAND_CTX *RAND_get0_private(OSSL_LIB_CTX *ctx)
         if (CRYPTO_THREAD_get_local(&dgbl->public) == NULL
                 && !ossl_init_thread_start(NULL, ctx, rand_delete_thread_state))
             return NULL;
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_disable();
+# endif
+#endif
         rand = rand_new_drbg(ctx, primary, SECONDARY_RESEED_INTERVAL,
                              SECONDARY_RESEED_TIME_INTERVAL, 0);
+#if defined(__has_feature)
+# if __has_feature(address_sanitizer)
+        __lsan_enable();
+# endif
+#endif
         CRYPTO_THREAD_set_local(&dgbl->private, rand);
     }
     return rand;
