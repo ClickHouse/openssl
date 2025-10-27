@@ -24,6 +24,12 @@
 #endif
 #endif
 
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+#    include <sanitizer/msan_interface.h>
+#  endif
+#endif
+
 void SHA3_squeeze(uint64_t A[5][5], unsigned char *out, size_t len, size_t r, int next);
 
 void ossl_sha3_reset(KECCAK1600_CTX *ctx)
@@ -164,7 +170,20 @@ int ossl_sha3_final_default(KECCAK1600_CTX *ctx, unsigned char *out, size_t outl
 
     (void)SHA3_absorb(ctx->A, ctx->buf, bsz, bsz);
 
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+    __msan_unpoison(ctx->buf, bsz);
+#  endif
+#endif
+
     SHA3_squeeze(ctx->A, out, outlen, bsz, 0);
+
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+    __msan_unpoison(out, outlen);
+#  endif
+#endif
+
     return 1;
 }
 
@@ -225,6 +244,13 @@ int ossl_shake_squeeze_default(KECCAK1600_CTX *ctx, unsigned char *out, size_t o
     if (outlen >= bsz) {
         len = bsz * (outlen / bsz);
         SHA3_squeeze(ctx->A, out, len, bsz, next);
+
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+    __msan_unpoison(out, len);
+#  endif
+#endif
+
         next = 1;
         out += len;
         outlen -= len;
@@ -232,6 +258,13 @@ int ossl_shake_squeeze_default(KECCAK1600_CTX *ctx, unsigned char *out, size_t o
     if (outlen > 0) {
         /* Step 3. Squeeze one more block into a buffer */
         SHA3_squeeze(ctx->A, ctx->buf, bsz, bsz, next);
+
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+    __msan_unpoison(ctx->buf, bsz);
+#  endif
+#endif
+
         memcpy(out, ctx->buf, outlen);
         /* Step 4. Remember the leftover part of the squeezed block */
         ctx->bufsz = bsz - outlen;
