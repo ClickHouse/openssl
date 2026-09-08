@@ -77,6 +77,10 @@ void OPENSSL_cpuid_setup(void) __attribute__((constructor));
 #include <sys/auxv.h>
 #define OSSL_IMPLEMENT_GETAUXVAL
 #endif
+#elif defined(__MUSL__)
+/* musl has always provided getauxval(), unversioned. */
+#include <sys/auxv.h>
+#define OSSL_IMPLEMENT_GETAUXVAL
 #endif
 #if defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <sys/param.h>
