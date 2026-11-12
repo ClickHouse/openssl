@@ -269,6 +269,16 @@ static void SS_free(TST_SS *p)
     OPENSSL_free(p);
 }
 
+static char *string_copy(const char *p)
+{
+    return OPENSSL_strdup(p);
+}
+
+static void string_free(char *p)
+{
+    OPENSSL_free(p);
+}
+
 static int test_SS_stack(void)
 {
     STACK_OF(TST_SS) *s = sk_TST_SS_new_null();
@@ -343,6 +353,55 @@ end:
     return testresult;
 }
 
+static int test_OPENSSL_STRING_deep_copy_mfail(void)
+{
+    STACK_OF(OPENSSL_STRING) *s = sk_OPENSSL_STRING_new_null();
+    STACK_OF(OPENSSL_STRING) *r = NULL;
+    static const char *strings[] = {
+        "alpha", "beta", "gamma"
+    };
+    char *p;
+    int i;
+    int testresult = 0;
+
+    if (!TEST_ptr(s))
+        goto end;
+
+    for (i = 0; i < (int)OSSL_NELEM(strings); i++) {
+        p = OPENSSL_strdup(strings[i]);
+        if (!TEST_ptr(p)
+            || !TEST_int_eq(sk_OPENSSL_STRING_push(s, p), i + 1)) {
+            OPENSSL_free(p);
+            goto end;
+        }
+    }
+
+    MFAIL_start();
+    r = sk_OPENSSL_STRING_deep_copy(s, string_copy, string_free);
+    MFAIL_end();
+
+    if (r == NULL)
+        goto end;
+
+    if (!TEST_int_eq(sk_OPENSSL_STRING_num(r), sk_OPENSSL_STRING_num(s)))
+        goto end;
+
+    for (i = 0; i < sk_OPENSSL_STRING_num(s); i++) {
+        char *src = sk_OPENSSL_STRING_value(s, i);
+        char *dst = sk_OPENSSL_STRING_value(r, i);
+
+        if (!TEST_ptr_ne(dst, src)
+            || !TEST_str_eq(dst, src))
+            goto end;
+    }
+
+    testresult = 1;
+end:
+    sk_OPENSSL_STRING_pop_free(r, string_free);
+    sk_OPENSSL_STRING_pop_free(s, string_free);
+    return testresult;
+}
+
 static int test_SU_stack(void)
 {
     STACK_OF(TST_SU) *s = sk_TST_SU_new_null();
@@ -385,5 +444,6 @@ int setup_tests(void)
     ADD_ALL_TESTS(test_uchar_stack, 4);
     ADD_TEST(test_SS_stack);
     ADD_TEST(test_SU_stack);
+    ADD_MFAIL_TEST(test_OPENSSL_STRING_deep_copy_mfail);
     return 1;
 }

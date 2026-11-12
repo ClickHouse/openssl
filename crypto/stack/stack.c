@@ -31,6 +31,9 @@ struct stack_st {
     int sorted;
     int num_alloc;
     OPENSSL_sk_compfunc comp;
+    int (*cmp_thunk)(OPENSSL_sk_compfunc, const void *, const void *);
+    OPENSSL_sk_freefunc_thunk free_thunk;
+    OPENSSL_sk_copyfunc_thunk copy_thunk;
 };
 
 OPENSSL_sk_compfunc OPENSSL_sk_set_cmp_func(OPENSSL_STACK *sk,
@@ -45,11 +48,21 @@ OPENSSL_sk_compfunc OPENSSL_sk_set_cmp_func(OPENSSL_STACK *sk,
     return old;
 }
 
+static void free_with_thunk(OPENSSL_STACK *sk, OPENSSL_sk_freefunc free_func, const void *data)
+{
+    if (data == NULL)
+        return;
+    if (sk->free_thunk != NULL)
+        sk->free_thunk(free_func, (void *)data);
+    else
+        free_func((void *)data);
+}
+
 OPENSSL_STACK *OPENSSL_sk_dup(const OPENSSL_STACK *sk)
 {
     OPENSSL_STACK *ret;
 
-    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL)
+    if ((ret = OPENSSL_zalloc(sizeof(*ret))) == NULL)
         goto err;
 
     if (sk == NULL) {
@@ -87,7 +100,7 @@ OPENSSL_STACK *OPENSSL_sk_deep_copy(const OPENSSL_STACK *sk,
     OPENSSL_STACK *ret;
     int i;
 
-    if ((ret = OPENSSL_malloc(sizeof(*ret))) == NULL)
+    if ((ret = OPENSSL_zalloc(sizeof(*ret))) == NULL)
         goto err;
 
     if (sk == NULL) {
@@ -114,10 +127,14 @@ OPENSSL_STACK *OPENSSL_sk_deep_copy(const OPENSSL_STACK *sk,
     for (i = 0; i < ret->num; ++i) {
         if (sk->data[i] == NULL)
             continue;
-        if ((ret->data[i] = copy_func(sk->data[i])) == NULL) {
+        if (ret->copy_thunk != NULL)
+            ret->data[i] = ret->copy_thunk(copy_func, sk->data[i]);
+        else
+            ret->data[i] = copy_func(sk->data[i]);
+
+        if (ret->data[i] == NULL) {
             while (--i >= 0)
-                if (ret->data[i] != NULL)
-                    free_func((void *)ret->data[i]);
+                free_with_thunk(ret, free_func, ret->data[i]);
             goto err;
         }
     }
@@ -224,6 +241,11 @@ static int sk_reserve(OPENSSL_STACK *st, int n, int exact)
     return 1;
 }
 
+static ossl_inline int cmp_with_thunk(const OPENSSL_STACK *st, const void *a, const void *b)
+{
+    return (st->cmp_thunk == NULL) ? st->comp(a, b) : st->cmp_thunk(st->comp, a, b);
+}
+
 OPENSSL_STACK *OPENSSL_sk_new_reserve(OPENSSL_sk_compfunc c, int n)
 {
     OPENSSL_STACK *st = OPENSSL_zalloc(sizeof(OPENSSL_STACK));
@@ -254,6 +276,30 @@ int OPENSSL_sk_reserve(OPENSSL_STACK *st, int n)
     if (n < 0)
         return 1;
     return sk_reserve(st, n, 1);
+}
+
+OPENSSL_STACK *OPENSSL_sk_set_thunks(OPENSSL_STACK *st, OPENSSL_sk_freefunc_thunk f_thunk)
+{
+    if (st != NULL)
+        st->free_thunk = f_thunk;
+
+    return st;
+}
+
+OPENSSL_STACK *OPENSSL_sk_set_cmp_thunks(OPENSSL_STACK *st, int (*c_thunk)(int (*)(const void *, const void *), const void *, const void *))
+{
+    if (st != NULL)
+        st->cmp_thunk = c_thunk;
+
+    return st;
+}
+
+OPENSSL_STACK *OPENSSL_sk_set_copy_thunks(OPENSSL_STACK *st, OPENSSL_sk_copyfunc_thunk cp_thunk)
+{
+    if (st != NULL)
+        st->copy_thunk = cp_thunk;
+
+    return st;
 }
 
 int OPENSSL_sk_insert(OPENSSL_STACK *st, const void *data, int loc)
@@ -320,6 +366,7 @@ static int internal_find(OPENSSL_STACK *st, const void *data,
 {
     const void *r;
     int i, count = 0;
+    int cmp_ret;
     int *pnum = pnum_matched;
 
     if (st == NULL || st->num == 0)
@@ -344,8 +391,9 @@ static int internal_find(OPENSSL_STACK *st, const void *data,
     if (!st->sorted) {
         int res = -1;
 
-        for (i = 0; i < st->num; i++)
-            if (st->comp(&data, st->data + i) == 0) {
+        for (i = 0; i < st->num; i++) {
+            cmp_ret = cmp_with_thunk(st, &data, st->data + i);
+            if (cmp_ret == 0) {
                 if (res == -1)
                     res = i;
                 ++*pnum;
@@ -353,6 +401,7 @@ static int internal_find(OPENSSL_STACK *st, const void *data,
                 if (pnum_matched == NULL)
                     return i;
             }
+        }
         if (res == -1)
             *pnum = 0;
         return res;
@@ -360,7 +409,7 @@ static int internal_find(OPENSSL_STACK *st, const void *data,
 
     if (pnum_matched != NULL)
         ret_val_options |= OSSL_BSEARCH_FIRST_VALUE_ON_MATCH;
-    r = ossl_bsearch(&data, st->data, st->num, sizeof(void *), st->comp,
+    r = ossl_bsearch(&data, st->data, st->num, sizeof(void *), st->comp, st->cmp_thunk,
         ret_val_options);
 
     if (pnum_matched != NULL) {
@@ -369,7 +418,8 @@ static int internal_find(OPENSSL_STACK *st, const void *data,
             const void **p = (const void **)r;
 
             while (p < st->data + st->num) {
-                if (st->comp(&data, p) != 0)
+                cmp_ret = cmp_with_thunk(st, &data, p);
+                if (cmp_ret != 0)
                     break;
                 ++*pnum;
                 ++p;
@@ -435,9 +485,10 @@ void OPENSSL_sk_pop_free(OPENSSL_STACK *st, OPENSSL_sk_freefunc func)
 
     if (st == NULL)
         return;
+
     for (i = 0; i < st->num; i++)
-        if (st->data[i] != NULL)
-            func((char *)st->data[i]);
+        free_with_thunk(st, func, st->data[i]);
+
     OPENSSL_sk_free(st);
 }
 
