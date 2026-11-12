@@ -433,9 +433,20 @@ void Poly1305_Init(POLY1305 *ctx, const unsigned char key[32])
  */
 #define poly1305_blocks (*poly1305_blocks_p)
 #define poly1305_emit (*poly1305_emit_p)
+/*
+ * The assembly `poly1305_init` stores raw addresses of assembly routines in
+ * `ctx->func`: they have no Clang CFI type, so these calls cannot be checked.
+ */
+#if defined(__clang__)
+#define POLY1305_NO_CFI_ICALL __attribute__((no_sanitize("cfi-icall")))
+#else
+#define POLY1305_NO_CFI_ICALL
+#endif
+#else
+#define POLY1305_NO_CFI_ICALL
 #endif
 
-void Poly1305_Update(POLY1305 *ctx, const unsigned char *inp, size_t len)
+POLY1305_NO_CFI_ICALL void Poly1305_Update(POLY1305 *ctx, const unsigned char *inp, size_t len)
 {
 #ifdef POLY1305_ASM
     /*
@@ -477,7 +488,7 @@ void Poly1305_Update(POLY1305 *ctx, const unsigned char *inp, size_t len)
     ctx->num = rem;
 }
 
-void Poly1305_Final(POLY1305 *ctx, unsigned char mac[16])
+POLY1305_NO_CFI_ICALL void Poly1305_Final(POLY1305 *ctx, unsigned char mac[16])
 {
 #ifdef POLY1305_ASM
     poly1305_blocks_f poly1305_blocks_p = ctx->func.blocks;
