@@ -108,11 +108,17 @@ extern "C" {
         CTX *inctx = (CTX *)vinctx;                                              \
         *outctx = *inctx;                                                        \
     }                                                                            \
+    static OSSL_FUNC_digest_update_fn name##_internal_update;                    \
+    static int name##_internal_update(void *ctx, const unsigned char *in,         \
+        size_t inl)                                                              \
+    {                                                                            \
+        return upd(ctx, in, inl);                                                \
+    }                                                                            \
     PROV_FUNC_DIGEST_FINAL(name, dgstsize, fin)                                  \
     PROV_FUNC_DIGEST_GET_PARAM(name, blksize, dgstsize, flags)                   \
     const OSSL_DISPATCH ossl_##name##_functions[] = {                            \
         { OSSL_FUNC_DIGEST_NEWCTX, (void (*)(void))name##_newctx },              \
-        { OSSL_FUNC_DIGEST_UPDATE, (void (*)(void))upd },                        \
+        { OSSL_FUNC_DIGEST_UPDATE, (void (*)(void))name##_internal_update },     \
         { OSSL_FUNC_DIGEST_FINAL, (void (*)(void))name##_internal_final },       \
         { OSSL_FUNC_DIGEST_FREECTX, (void (*)(void))name##_freectx },            \
         { OSSL_FUNC_DIGEST_DUPCTX, (void (*)(void))name##_dupctx },              \
