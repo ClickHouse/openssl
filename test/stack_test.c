@@ -376,9 +376,7 @@ static int test_OPENSSL_STRING_deep_copy_mfail(void)
         }
     }
 
-    MFAIL_start();
     r = sk_OPENSSL_STRING_deep_copy(s, string_copy, string_free);
-    MFAIL_end();
 
     if (r == NULL)
         goto end;
@@ -444,6 +442,6 @@ int setup_tests(void)
     ADD_ALL_TESTS(test_uchar_stack, 4);
     ADD_TEST(test_SS_stack);
     ADD_TEST(test_SU_stack);
-    ADD_MFAIL_TEST(test_OPENSSL_STRING_deep_copy_mfail);
+    ADD_TEST(test_OPENSSL_STRING_deep_copy_mfail);
     return 1;
 }
