@@ -39,6 +39,23 @@ OPENSSL_STACK *OPENSSL_sk_new_reserve(OPENSSL_sk_compfunc c, int n);
 OPENSSL_STACK *OPENSSL_sk_set_thunks(OPENSSL_STACK *st, OPENSSL_sk_freefunc_thunk f_thunk);
 OPENSSL_STACK *OPENSSL_sk_set_cmp_thunks(OPENSSL_STACK *st, int (*c_thunk)(int (*)(const void *, const void *), const void *, const void *));
 OPENSSL_STACK *OPENSSL_sk_set_copy_thunks(OPENSSL_STACK *st, OPENSSL_sk_copyfunc_thunk cp_thunk);
+/*
+ * The setters of the typed thunks are not in upstream OpenSSL 3.5, and only Clang CFI (cfi-icall) needs the thunks,
+ * so only CFI builds install them and the others keep the upstream ABI.
+ */
+#if defined(__has_feature)
+#if __has_feature(cfi_icall_sanitizer)
+#define OPENSSL_SK_TYPED_THUNKS
+#endif
+#endif
+#ifdef OPENSSL_SK_TYPED_THUNKS
+#define OPENSSL_sk_install_free_thunk(st, free_thunk) OPENSSL_sk_set_thunks((st), (free_thunk))
+#define OPENSSL_sk_install_thunks(st, cmp_thunk, copy_thunk, free_thunk) \
+    OPENSSL_sk_set_thunks(OPENSSL_sk_set_copy_thunks(OPENSSL_sk_set_cmp_thunks((st), (cmp_thunk)), (copy_thunk)), (free_thunk))
+#else
+#define OPENSSL_sk_install_free_thunk(st, free_thunk) (st)
+#define OPENSSL_sk_install_thunks(st, cmp_thunk, copy_thunk, free_thunk) (st)
+#endif
 int OPENSSL_sk_reserve(OPENSSL_STACK *st, int n);
 void OPENSSL_sk_free(OPENSSL_STACK *);
 void OPENSSL_sk_pop_free(OPENSSL_STACK *st, OPENSSL_sk_freefunc func);
