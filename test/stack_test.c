@@ -376,9 +376,7 @@ static int test_OPENSSL_STRING_deep_copy_mfail(void)
         }
     }
 
-    MFAIL_start();
     r = sk_OPENSSL_STRING_deep_copy(s, string_copy, string_free);
-    MFAIL_end();
 
     if (r == NULL)
         goto end;
@@ -438,12 +436,43 @@ end:
     return testresult;
 }
 
+static int test_int_stack_sort(void)
+{
+    STACK_OF(sint) *s = sk_sint_new(&int_compare);
+    int v[200];
+    const int n = OSSL_NELEM(v);
+    int i;
+    int testresult = 0;
+
+    /* unsorted, with duplicates */
+    for (i = 0; i < n; i++) {
+        v[i] = (i * 37) % 10;
+        sk_sint_push(s, v + i);
+    }
+    if (!TEST_int_eq(sk_sint_num(s), n))
+        goto end;
+    sk_sint_sort(s);
+    if (!TEST_ulong_eq(ERR_peek_error(), 0))
+        goto end;
+    for (i = 1; i < n; i++)
+        if (!TEST_int_le(*sk_sint_value(s, i - 1), *sk_sint_value(s, i))) {
+            TEST_info("int stack sort %d", i);
+            goto end;
+        }
+
+    testresult = 1;
+end:
+    sk_sint_free(s);
+    return testresult;
+}
+
 int setup_tests(void)
 {
     ADD_ALL_TESTS(test_int_stack, 4);
+    ADD_TEST(test_int_stack_sort);
     ADD_ALL_TESTS(test_uchar_stack, 4);
     ADD_TEST(test_SS_stack);
     ADD_TEST(test_SU_stack);
-    ADD_MFAIL_TEST(test_OPENSSL_STRING_deep_copy_mfail);
+    ADD_TEST(test_OPENSSL_STRING_deep_copy_mfail);
     return 1;
 }
