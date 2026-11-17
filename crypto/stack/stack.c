@@ -525,11 +525,39 @@ void *OPENSSL_sk_set(OPENSSL_STACK *st, int i, const void *data)
     return (void *)st->data[i];
 }
 
+/*
+ * The stack being sorted by OPENSSL_sk_sort, for sort_cmp.
+ *
+ * st->comp cannot be passed to qsort directly: qsort calls it as
+ * int (*)(const void *, const void *), which is not the type it was defined
+ * with (e.g. ossl_provider_cmp), and Clang CFI rejects that call. Comparing
+ * through st->cmp_thunk fixes the type, as ossl_bsearch does, but the
+ * comparison function given to qsort receives only the two elements, not the
+ * stack that holds the thunk. qsort_r would pass it, but it is not available
+ * on every libc (glibc has it only since 2.8, and BSD's takes its arguments in
+ * another order), so the stack is kept here, per thread, for the duration of
+ * the sort. Reported upstream in
+ * https://github.com/openssl/openssl/issues/22896#issuecomment-6952731417
+ */
+static _Thread_local const OPENSSL_STACK *sort_stack;
+
+/* Compares two elements of sort_stack through its thunk. */
+static int sort_cmp(const void *a, const void *b)
+{
+    return cmp_with_thunk(sort_stack, a, b);
+}
+
 void OPENSSL_sk_sort(OPENSSL_STACK *st)
 {
     if (st != NULL && !st->sorted && st->comp != NULL) {
-        if (st->num > 1)
-            qsort(st->data, st->num, sizeof(void *), st->comp);
+        if (st->num > 1) {
+            /* Restored after, as a comparison function may sort another stack. */
+            const OPENSSL_STACK *outer = sort_stack;
+
+            sort_stack = st;
+            qsort(st->data, st->num, sizeof(void *), sort_cmp);
+            sort_stack = outer;
+        }
         st->sorted = 1; /* empty or single-element stack is considered sorted */
     }
 }
