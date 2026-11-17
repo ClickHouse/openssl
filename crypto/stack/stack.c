@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include "internal/cryptlib.h"
 #include "internal/numbers.h"
+#include "internal/nelem.h"
 #include "internal/safe_math.h"
 #include <openssl/stack.h>
 #include <errno.h>
@@ -528,39 +529,91 @@ void *OPENSSL_sk_set(OPENSSL_STACK *st, int i, const void *data)
     return (void *)st->data[i];
 }
 
-/*
- * The stack being sorted by OPENSSL_sk_sort, for sort_cmp.
- *
- * st->comp cannot be passed to qsort directly: qsort calls it as
- * int (*)(const void *, const void *), which is not the type it was defined
- * with (e.g. ossl_provider_cmp), and Clang CFI rejects that call. Comparing
- * through st->cmp_thunk fixes the type, as ossl_bsearch does, but the
- * comparison function given to qsort receives only the two elements, not the
- * stack that holds the thunk. qsort_r would pass it, but it is not available
- * on every libc (glibc has it only since 2.8, and BSD's takes its arguments in
- * another order), so the stack is kept here, per thread, for the duration of
- * the sort. Reported upstream in
- * https://github.com/openssl/openssl/issues/22896#issuecomment-6952731417
- */
-static _Thread_local const OPENSSL_STACK *sort_stack;
-
-/* Compares two elements of sort_stack through its thunk. */
-static int sort_cmp(const void *a, const void *b)
+static ossl_inline void swap_data(const void **data, int i, int j)
 {
-    return cmp_with_thunk(sort_stack, a, b);
+    const void *tmp = data[i];
+
+    data[i] = data[j];
+    data[j] = tmp;
+}
+
+/* Restore the max-heap order of |st->data[root..end)| below |root| */
+static ossl_inline void sift_down(const OPENSSL_STACK *st, int root, int end)
+{
+    int child;
+
+    while (root < end / 2) {
+        child = 2 * root + 1;
+        if (child + 1 < end && cmp_with_thunk(st, &st->data[child], &st->data[child + 1]) < 0)
+            child++;
+        if (cmp_with_thunk(st, &st->data[root], &st->data[child]) >= 0)
+            break;
+        swap_data(st->data, root, child);
+        root = child;
+    }
+}
+
+static void heap_sort(const OPENSSL_STACK *st)
+{
+    int i;
+
+    for (i = st->num / 2 - 1; i >= 0; i--)
+        sift_down(st, i, st->num);
+    for (i = st->num - 1; i > 0; i--) {
+        swap_data(st->data, 0, i);
+        sift_down(st, 0, i);
+    }
+}
+
+/* Sort |st->data[lo..hi)| stably, using |tmp[lo..hi)| */
+static void merge_sort(const OPENSSL_STACK *st, const void **tmp, int lo, int hi)
+{
+    const void **data = st->data;
+    int mid = lo + (hi - lo) / 2;
+    int i = lo, j = mid, k = lo;
+
+    if (hi - lo < 2)
+        return;
+    merge_sort(st, tmp, lo, mid);
+    merge_sort(st, tmp, mid, hi);
+    if (cmp_with_thunk(st, &data[mid - 1], &data[mid]) <= 0)
+        return;
+    while (i < mid && j < hi)
+        tmp[k++] = cmp_with_thunk(st, &data[j], &data[i]) < 0 ? data[j++] : data[i++];
+    while (i < mid)
+        tmp[k++] = data[i++];
+    /* The rest of the upper half is already in place */
+    memcpy(&data[lo], &tmp[lo], (k - lo) * sizeof(*data));
+}
+
+/*
+ * Sort |st->data|, calling |st->comp| only via cmp_with_thunk().
+ * Reported upstream in https://github.com/openssl/openssl/issues/22896#issuecomment-6952731417
+ */
+static void sort_with_thunk(const OPENSSL_STACK *st)
+{
+    const void *stack[128];
+    const void **tmp = stack;
+
+    /* No |file| and |line|: a failed allocation reports no error, heap_sort() runs */
+    if (st->num > (int)OSSL_NELEM(stack))
+        tmp = CRYPTO_malloc(st->num * sizeof(*tmp), NULL, 0);
+    if (tmp == NULL) {
+        heap_sort(st);
+        return;
+    }
+    merge_sort(st, tmp, 0, st->num);
+    if (tmp != stack)
+        OPENSSL_free(tmp);
 }
 
 void OPENSSL_sk_sort(OPENSSL_STACK *st)
 {
     if (st != NULL && !st->sorted && st->comp != NULL) {
-        if (st->num > 1) {
-            /* Restored after, as a comparison function may sort another stack. */
-            const OPENSSL_STACK *outer = sort_stack;
-
-            sort_stack = st;
-            qsort(st->data, st->num, sizeof(void *), sort_cmp);
-            sort_stack = outer;
-        }
+        if (st->num > 1 && st->cmp_thunk != NULL)
+            sort_with_thunk(st);
+        else if (st->num > 1)
+            qsort(st->data, st->num, sizeof(void *), st->comp);
         st->sorted = 1; /* empty or single-element stack is considered sorted */
     }
 }
