@@ -15,10 +15,10 @@
 #include <openssl/bio.h>
 #include "ext_dat.h"
 
-static GENERAL_NAMES *v2i_subject_alt(X509V3_EXT_METHOD *method,
+static GENERAL_NAMES *v2i_subject_alt(const X509V3_EXT_METHOD *method,
     X509V3_CTX *ctx,
     STACK_OF(CONF_VALUE) *nval);
-static GENERAL_NAMES *v2i_issuer_alt(X509V3_EXT_METHOD *method,
+static GENERAL_NAMES *v2i_issuer_alt(const X509V3_EXT_METHOD *method,
     X509V3_CTX *ctx,
     STACK_OF(CONF_VALUE) *nval);
 static int copy_email(X509V3_CTX *ctx, GENERAL_NAMES *gens, int move_p);
@@ -298,7 +298,7 @@ int GENERAL_NAME_print(BIO *out, GENERAL_NAME *gen)
     return 1;
 }
 
-static GENERAL_NAMES *v2i_issuer_alt(X509V3_EXT_METHOD *method,
+static GENERAL_NAMES *v2i_issuer_alt(const X509V3_EXT_METHOD *method,
     X509V3_CTX *ctx,
     STACK_OF(CONF_VALUE) *nval)
 {
@@ -374,7 +374,7 @@ err:
     return 0;
 }
 
-static GENERAL_NAMES *v2i_subject_alt(X509V3_EXT_METHOD *method,
+static GENERAL_NAMES *v2i_subject_alt(const X509V3_EXT_METHOD *method,
     X509V3_CTX *ctx,
     STACK_OF(CONF_VALUE) *nval)
 {
